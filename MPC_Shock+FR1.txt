@@ -1,0 +1,238 @@
+\ Adapted from MEDState Notation Repository - SRC 10/2023
+
+\Before starting user enters values for session time, FR value, reward time
+\When START command is issue the no levers are extended. The program is still working. 
+\Shock occurs at random intervals (list Z) over a 10min period at the start of the session. 
+\After 10 mins, the active and inactive levers extend as with the FR1 code. 
+\Program will record active lever presses, inactive lever presses, rewards delivered, and number of shocks received.
+\Pressing the active lever will result in cocaine infusion (0.75 mg/kg over 6 s) and illumination of light above active lever (6s)
+\whereas the house light will be illuminated for 20 s, during which pressing the active hole will be counted but will result in no cocaine infusions.
+\After this 20 s period, the house light will turn off, and the next active lever press will result in cocaine infusion
+\Pressing the inactive lever will have no reinforcement consequences but will be recorded. 
+
+
+\ Inputs
+^inactivelever  = 1 \Left Lever
+^activelever    = 2 \Right Lever
+
+\ Outputs
+^leftlever  = 1  \inactive lever
+^rightlever = 2  \active lever
+^pump       = 3
+^left_light = 5
+^rightlight = 6
+^houselight = 7
+^shock      = 8
+
+
+\ A() = Control Variables with Assigned Aliases as Defined
+Var_Alias Session Length (min)            = A(0)  \ Default = 60 minutes
+Var_Alias Max Rewards                     = A(1)  \ Default = 100
+Var_Alias Fixed Ratio Value               = A(2)  \ Default = 1
+Var_Alias Time Out Following Reward (sec) = A(3)  \ Default = 20 seconds
+Var_Alias Rat Weight                      = A(5)  \ Default = 250
+Var_Alias Shock Session Duration (min)    = A(6)  \ Default = 10 minutes
+
+^Session      = 0
+^MaxRewards   = 1
+^FRVal        = 2
+^TimeOut      = 3
+^TimeOutTicks = 4
+^Weight       = 5
+^ShockTime    = 6
+
+
+\ List Data Variables Here
+
+\  B(0) = Total Infusions
+\  B(1) = Total Active Lever
+\  B(2) = Total Inactive Lever
+
+
+\  L() = Left  Lever Response Array
+\  R() = Right Lever Response Array
+\  W() = Shock Output Array
+\  S(1) = Elapsed Time in SHOCK Session
+\  S(2) = Elapsed Time in REINSTATEMENT Session
+
+
+\ List Working Variables Here
+\  C = Ratio Response Counter
+\  I = Index into Inactive Lever Response Array L
+\  J = Index into Active Lever Response Array R
+\  K = Index into Shock Output Array W
+\  X = Random selection of shock time list WITHOUT REPLACEMENT
+\  Y = Shock output counter 
+\  Z = Shock time interval list
+
+
+DIM A = 6
+DIM B = 3
+DIM L = 10000
+DIM R = 10000
+DIM W = 10000
+
+\ Z-Pulses Used in this Program
+^Z_Reward    = 1   \ Signal Pump Reinforcement
+^Z_Shock     = 2   \ Signal Shock
+^Z_Levers    = 3   \ Signal End of Shock, Start of Reinstatement
+^Z_End       = 32  \ Signal End of Session
+
+\ LIST OF TIME INTERVALS BETWEEN SHOCKS IN SECONDS 
+LIST Z = 10",15",20",25",30",35",40",45",50",55",60"
+
+\***************************************************
+\                    SHOCK PROGRAM
+\***************************************************
+S.S.1,
+S1,  \ At the start, set the shock counter to 0, shock session duration to 10 mins, and seal the shock counter array
+  #START: SET Y = 0, A(^ShockTime) = 10; SET W(K) = -987.987;  
+  SHOW 5,ShockTime,S(1)/60 ---> S2    \Display the time specified for shock session  
+  0.01": SET S(1) = S(1) + 0.01;      \Time of shock session length then switch to reinstatement
+         SHOW 1,Shock,S(1)/60;
+         IF S(1)/60  >= A(^ShockTime) [@EndShock, @ContinueTiming]
+            @End: Z^Z_Levers ---> S4
+            @Cont: ADD Y ---> SX
+  #Z^Z_Levers: ---> S4
+
+S2, 
+  RANDD X = Z; VI = ,X ---> S3           \ Randomly select from list Z without replacement until all are selected once then repeats
+
+S3,
+  X#T: ADD X; SET W(K) = S(1), K = K + 1, W(K) = -987.987; 
+  Z^Z_Shock: ---> S4
+
+S4, 
+
+
+
+S.S.2, 
+S1,  
+  #Z^Z_Shock: ON ^shock ---> S2
+
+S2, 
+  0.5": OFF ^shock --> S1
+
+
+\***************************************************
+\               Fixed Ratio Schedule
+\  S1 - Set Default Values
+\       Session Length             (60 minutes)
+\       Max Rewards                (100)
+\       Fixed Ratio Value          (1)
+\       Time Out Following Reward  (20 seconds)
+\       Rat Weight                 (250 grams)
+\***************************************************
+S.S.3,
+S1,
+  0.01": SET A(^Session) = 60, A(^MaxRewards) = 100;
+         SET A(^FRVal)   = 1,  A(^TimeOut)    = 20;
+         SET A(^Weight) = 250;
+         SET L(I) = -987.987;
+         SET R(J) = -987.987 ---> S2
+
+S2,     \ First Statement: Wait for START signal, and
+        \ associated stimulus ON.
+        \
+        \ Second Statement: Update screen display with default values
+        \ for Control Variables.  This will show any changes made via
+        \ the "Configure | Change Variables" Window prior to START.
+  #START: CLEAR 1,200;
+          SET A(^TimeOutTicks) = A(^TimeOut) * 1";
+          ON ^leftlever, ^rightlever;
+          SHOW 1,Session,S(2)/60 ---> S3
+  1": SHOW 1,Session Length,A(^Session), 2,Max Rewards,A(^MaxRewards);
+      SHOW 3,FR Value,A(^FRVal),         4,Time Out,A(^TimeOut) ---> SX
+
+S3,     \ Time Session Length
+  0.01": SET S = S + 0.01;
+         SHOW 1,Session,S/60;
+         IF S/60 >= A(^Session) [@EndSession, @ContinueTiming]
+            @End: Z^Z_End ---> S4
+            @Cont: ---> SX
+  #Z^Z_End: ---> S4
+
+S4,     \ Wait for Screen Update and end with
+        \ STOPABORTFLUSH for Automatic Data Saving
+  2": ---> STOPABORTFLUSH
+
+
+\***************************************************
+\                   MAIN PROGRAM
+\***************************************************
+S.S.4,
+S1,
+  #Z^Z_Levers ---> S2
+
+S2, 
+  #START---> S3
+
+S3,     \ Fixed Ratio
+  #R^activelever: ADD C;
+                IF C >= A(^FRVal) [@FRMet, @False]
+                   @FRMet: ADD B(0); SET C = 0; ON ^houselight;
+                            Z^Z_Reward ---> S4
+                   @False: ---> SX
+  #R^inactivelever: ADD B(2) ---> SX
+  #Z^Z_End: ---> S5
+
+
+S4,     \ Time Out Interval Following Reward
+  A(^TimeOutTicks)#T: IF B(0) >= A(^MaxRewards) [@End, @Cont]
+                         @End: Z^Z_End ---> S5
+                         @Cont: Off ^houselight ---> S3
+  #Z^Z_End: ---> S5
+
+S5,     \ End of Session - Retract Levers
+  0.01": OFF ^leftlever, ^ rightlever ---> S6
+
+S6,     \ Holding State at End of Session
+  1': ---> SX
+
+
+\***************************************************
+\             LEFT LEVER RESPONSE ARRAY
+\***************************************************
+S.S.5,
+S1,
+  #START: ---> S2
+
+S2,
+  #R^inactivelever: ADD B(2); SET L(I) = S, I = I + 1, L(I) = -987.987 ---> SX
+  #Z^Z_End: ---> S1
+
+
+\***************************************************
+\            RIGHT LEVER RESPONSE ARRAY
+\***************************************************
+S.S.6,
+S1,
+  #START: ---> S2
+
+S2,
+  #R^activelever: ADD B(1); SET R(J) = S, J = J + 1, R(J) = -987.987 ---> SX
+  #Z^Z_End: ---> S1
+
+
+\***************************************************
+\    REWARD CONTROL TIMER and House Light Time out
+\***************************************************
+S.S.7,
+S1,
+  #Z^Z_Reward: ON ^Pump, ^RightLight ---> S2
+
+S2,     \ Time Reward Device for 6" seconds
+  (A(^Weight) * 1.125)#T: OFF ^Pump, ^RightLight ---> S1 \ change pump time here
+
+
+
+\***************************************************
+\                  UPDATE DISPLAY
+\***************************************************
+S.S.8,
+S1,
+  #START: SHOW 3,Active,B(1), 4,Inactive,B(2), 2,Infusions,B(0), 6,ShockNum,(Y) ---> S2
+
+S2,
+  0.01": SHOW 3,Active,B(1), 4,Inactive,B(2), 2,Infusions,B(0), 6,ShockNum,(Y)---> S2
+

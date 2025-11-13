@@ -1,0 +1,128 @@
+\KGB Intermittent Access (IntA) code for cocaine self-ad so Espana Lab - Updated 8/31/18, 12/2021
+\This program is set so that after 25 minutes, the levers come out for 5 mins and
+\the pressing of the right (active) lever results in cocaine infusion and cue light for 1.5s.
+\Active and inactive lever presses, as well as infusions, are time stamped
+\Modified for males so that with a 5rpm pump, 10ml syringe, infusion length based on weight in g 
+\results in 0.375mg/kg per infusion
+
+\Inputs
+
+^Ilev = 1 \Inactive lever - Left Lever presses
+^Alev = 2 \Active lever - Right Lever presses
+
+
+\Outputs
+
+^Leftlever = 1 \Inactive lever
+^Rightlever = 2 \Active lever
+^Pump = 3 \Infusion pump
+^CueLight = 6 \Light above right lever
+^Houselight = 7 \houselight
+
+
+\ A() = Control Variables with Assigned Aliases as Defined
+Var_Alias Session Length (min)            = A(0)  \ Default = 60 minutes
+Var_Alias Max Rewards                     = A(1)  \ Default = 100 infusions
+Var_Alias Fixed Ratio Value               = A(2)  \ Default = 1
+Var_Alias Rat Weight                      = A(3)  \ Default = 250 grams
+
+^Session      = 0
+^MaxRewards   = 1
+^FRVal        = 2
+^Weight       = 3
+
+
+\     A() = Array of Variables in "Change Variables" Pop-up Window
+\     B(0)= Number of Infusions
+\     B(1)= Number of Active Presses (Right Lever)
+\     B(2)= Numbwe of Inactive Presses (Left Lever)
+\       C = Ratio Response Counter
+\       I = Index into Inactive Lever Response Array L
+\       J = Index into Active Lever Response Array R
+\       O = Levers out or not
+\          O = 1 --> Levers out
+\          O = 0 --> Levers not out
+\       S = Elapsed Time in Session
+\       W = animal weight (g)
+
+\  L() = Left  Lever Response Array
+\  R() = Right Lever Response Array
+
+
+DIM A = 5         \"Change Variables"
+DIM B = 3         \Data outputs
+DIM L = 10000     \Left lever response array
+DIM R = 10000     \Right lever response array
+
+
+^Zr=1
+\ *****************************************************
+\                 Program Start
+\ *****************************************************
+
+S.S.1,
+
+S1,
+  0.01": SET A(^Session)= 360, A(^MaxRewards) = 100;
+         SET A(^FRVal)   = 1, A(^Weight) = 250;
+         SET L(I) = -987.987;
+         SET R(J) = -987.987 ---> S2
+
+S2,
+    #START:  SET O = 0 ---> S3 \art program,initially levers not out
+S3,
+        0.01": SHOW, 1,Session,S, 3,Active, B(1), 4,Inactive,B(2), 2,Infusions,B(0) --->S4 \Show display at start of program
+
+S4,
+    1": Add S; SHOW, 1, Session, (S/60)+0.1;
+        If S/60 >= (A(^Session))  [@TRUE, @FALSE] \Update time display ever 0.1s and end the program after a preset time (N) is reached
+            @TRUE: ---> S5
+            @FALSE: ---> S4
+S5,
+    3": ---> STOPABORTFLUSH \once the preset time is reached, stop and save the program
+
+\ *****************************************************
+\                  IntA Program
+\ *****************************************************
+
+S.S.2
+
+S1,
+        #START ---> S2
+S2,
+    0.01": ON ^RIGHTLEVER, ^LeftLever; SET O=1 ---> S4
+S3,
+    25.0': ON ^Rightlever, ^Leftlever; SET O=1  ---> S4 \Wait 25min then put out levers
+S4,
+    5.0': OFF ^Rightlever, ^Leftlever; SET O=0 ---> S3 \wait 5 min then retract levers
+\ *****************************************************
+\                     Active Lever Presses
+\ *****************************************************
+
+S.S.3
+S1,
+    #R ^Alev: Add B(1); SHOW, 3, Active, B(1); SET R(J) = S, J = J + 1, R(J) = -987.987; Z1 ---> S1 \When Active lev input received, update display and initiate z pulse
+
+\ *****************************************************
+\                    Cocaine infusions
+\ *****************************************************
+
+S.S.4
+S1,
+    #Z1 ---> S2
+S2,
+    0.01": If O = 1 [@TRUE, @FALSE] \Z pulse: if levers are out, deliver infusion, if not, reset
+        @TRUE: ---> S3
+        @FALSE: ---> S2
+S3,
+    0.01": ON ^PUMP,^CUELIGHT; Add B(0); SHOW, 2, Infusions, B(0) ---> S4 \Turn on pump, update display
+S4,
+    (A(^Weight)*.28125)#T: OFF ^PUMP, ^CUELIGHT --->S1 \weight x multiplier = pump time in milliseconds
+
+\ *****************************************************
+\               Inactive Lever Presses
+\ *****************************************************
+
+S.S.5
+S1,
+    #R ^ILEV: Add B(2); SHOW, 4,Inactive,B(2); SET L(I) = S, I = I + 1, L(I) = -987.987 ---> SX   \ Record inactive lever presses and update display
